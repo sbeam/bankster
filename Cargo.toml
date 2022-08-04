@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 csv = "1.1.6"
+rust_decimal = { version = "1.25.0", features = ["serde-with-float"] }
+rust_decimal_macros = "1.25.0"
 serde = { version = "1.0.142", features = ["derive"] }
