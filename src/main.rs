@@ -1,15 +1,24 @@
 use serde::Deserialize;
 // use std::error::Error;
-use rust_decimal_macros::dec;
+// use rust_decimal_macros::dec;
 use rust_decimal::Decimal;
 
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Copy, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum TransactionType {
+    Deposit,
+    Withdrawal,
+    Dispute,
+    Resolve,
+}
+
+#[derive(Debug, Copy, Clone, Deserialize)]
 struct TransactionRecord {
     client_id: u16,
     #[serde(rename = "type")]
-    tx_type: String,
+    tx_type: TransactionType,
     #[serde(rename = "tx")]
     tx_id: u32,
     #[serde(with = "rust_decimal::serde::float")]
@@ -65,43 +74,49 @@ impl Account {
     // dispute a transaction
     fn dispute(&mut self, id: u32) { }
 
+    fn resolve(&mut self, id: u32) { }
+
+    fn process(&mut self, transaction: &TransactionRecord) {
+        match transaction.tx_type {
+            TransactionType::Deposit => {
+                self.deposit(transaction.amount);
+            },
+            TransactionType::Withdrawal => {
+                if let Err(InsufficientFundsError) = self.withdraw(transaction.amount) {
+                    println!("Insufficient funds");
+                }
+            },
+            TransactionType::Dispute => {
+                self.dispute(transaction.tx_id);
+            }
+            TransactionType::Resolve => {
+                self.resolve(transaction.tx_id);
+            }
+        }
+        self.transactions.insert(transaction.tx_id, *transaction);
+    }
 }
 
 
 fn main() {
     let data = "amount,client_id,tx,type\n100.01,99,1,deposit\n2.9,34,2,withdrawal\nxxx,xx\n9.99,99,3,deposit\n-80,34,5,withdrawal";
-    let lines = read_csv(data);
+    let records = read_csv(data);
 
-    println!("Processed {:?} transactions", lines.len());
+    println!("Processed {:?} transactions", records.len());
 
     let mut accounts = HashMap::new();
 
     let mut total_deposits = Decimal::new(0, 2);
-    for line in lines {
-        total_deposits += line.amount;
+    
+    for record in records {
+        total_deposits += record.amount;
 
-        println!("{}: ${:?}, {}", line.client_id, line.amount, line.tx_type);
+        println!("{}: ${:?}, {:?}", record.client_id, record.amount, record.tx_type);
 
-        let account = accounts.entry(line.client_id)
-          .or_insert_with(|| Account::new(line.client_id));
+        let account = accounts.entry(record.client_id)
+          .or_insert_with(|| Account::new(record.client_id));
 
-        match line.tx_type.as_str() {
-            "deposit" => {
-                account.deposit(line.amount);
-            },
-            "withdrawal" => {
-                if let Err(InsufficientFundsError) = account.withdraw(line.amount) {
-                    println!("Insufficient funds");
-                }
-            },
-            "dispute" => {
-                account.dispute(line.tx_id);
-            }
-            _ => {
-                println!("Unknown transaction type: {}", line.tx_type);
-            }
-        }
-        account.transactions.insert(line.tx_id, line);
+        account.process(&record);
     };
     println!("total deposits: ${:?}", total_deposits);
 }
