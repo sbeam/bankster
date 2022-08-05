@@ -30,9 +30,9 @@ pub struct DepositRecord {
 }
 
 pub struct Account {
-    available: Decimal,
-    held: Decimal,
-    locked: bool,
+    pub available: Decimal,
+    pub held: Decimal,
+    pub locked: bool,
     deposits: HashMap<u32, DepositRecord>,
 }
 
