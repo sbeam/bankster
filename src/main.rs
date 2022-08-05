@@ -24,7 +24,7 @@ fn main() {
         println!("{}: ${:?}, {:?}", record.client_id, record.amount, record.tx_type);
 
         let account = accounts.entry(record.client_id)
-          .or_insert_with(|| Account::new(record.client_id));
+          .or_insert_with(Account::new);
 
         account.process(&record);
     };

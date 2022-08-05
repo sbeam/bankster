@@ -21,47 +21,51 @@ pub struct TransactionRecord {
     pub tx_id: u32,
     #[serde(with = "rust_decimal::serde::float")]
     pub amount: Decimal,
-    pub disputed: bool
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct DepositRecord {
+    pub disputed: bool,
+    pub amount: Decimal,
 }
 
 pub struct Account {
-    id: u16,
     available: Decimal,
     held: Decimal,
     locked: bool,
-    transactions: HashMap<u32, TransactionRecord>
+    deposits: HashMap<u32, DepositRecord>
 }
 
 #[derive(Debug, Clone)]
 struct InsufficientFundsError;
 
+#[derive(Debug, Clone)]
+struct InvalidChargebackError;
+
+impl Default for Account {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Account {
-    pub fn new(id: u16) -> Self {
+    pub fn new() -> Self {
         Self {
-            id,
-            available: Decimal::new(0, 2),
-            held: Decimal::new(0, 2),
+            available: Decimal::new(0, 4),
+            held: Decimal::new(0, 4),
             locked: false,
-            transactions: HashMap::new()
+            deposits: HashMap::new()
         }
     }
 
-    // lock an Account
     fn lock(&mut self) {
         self.locked = true;
     }
 
-    // unlock an Account
-    fn unlock(&mut self) {
-        self.locked = false;
-    }
-
-    // deposit money into an Account
     fn deposit(&mut self, amount: Decimal) {
         self.available += amount;
     }
 
-    // withdraw money from an Account
     fn withdraw(&mut self, amount: Decimal) -> Result<(), InsufficientFundsError> {
         if self.available < amount {
             return Err(InsufficientFundsError);
@@ -70,30 +74,51 @@ impl Account {
         Ok(())
     }
 
-    // dispute a transaction
     fn dispute(&mut self, id: u32) {
-        if let Some(tx) = self.transactions.get_mut(&id) {
-            if !tx.disputed {
-                tx.disputed = true;
-                self.available -= tx.amount;
-                self.held += tx.amount;
+        if let Some(deposit) = self.deposits.get_mut(&id) {
+            if !deposit.disputed {
+                deposit.disputed = true;
+                self.available -= deposit.amount;
+                self.held += deposit.amount;
             }
         }
-
     }
 
-    fn resolve(&mut self, id: u32) { }
+    fn resolve(&mut self, id: u32) {
+        if let Some(deposit) = self.deposits.get_mut(&id) {
+            if deposit.disputed {
+                deposit.disputed = false;
+                self.available += deposit.amount;
+                self.held -= deposit.amount;
+            }
+        }
+    }
 
-    fn chargeback(&mut self, id: u32) { }
+    fn chargeback(&mut self, id: u32) -> Result<(), InvalidChargebackError> {
+        if let Some(deposit) = self.deposits.get_mut(&id) {
+            if !deposit.disputed {
+                return Err(InvalidChargebackError);
+            } else {
+                self.held -= deposit.amount;
+                self.lock()
+            }
+        }
+        Ok(())
+    }
 
     pub fn process(&mut self, transaction: &TransactionRecord) {
         match transaction.tx_type {
             TransactionType::Deposit => {
                 self.deposit(transaction.amount);
+                self.deposits.insert(
+                    transaction.tx_id, 
+                    DepositRecord { disputed: false, amount: transaction.amount }
+                );
             },
             TransactionType::Withdrawal => {
                 if let Err(InsufficientFundsError) = self.withdraw(transaction.amount) {
-                    println!("Insufficient funds");
+                    // probably should do something else here
+                    println!("Insufficient funds for transaction id {:?}", transaction.tx_id);
                 }
             },
             TransactionType::Dispute => {
@@ -103,10 +128,12 @@ impl Account {
                 self.resolve(transaction.tx_id);
             }
             TransactionType::Chargeback => {
-                self.chargeback(transaction.tx_id);
+                if let Err(InvalidChargebackError) = self.chargeback(transaction.tx_id) {
+                    // probably should do something else here
+                    println!("Invalid chargeback for transaction id {:?}", transaction.tx_id);
+                }
             }
         }
-        self.transactions.insert(transaction.tx_id, *transaction);
     }
 }
 
@@ -116,126 +143,162 @@ mod tests {
     use rust_decimal_macros::dec;
 
     #[test]
-    fn process_deposits() {
-        // copilot, omg!
-        let records = vec![
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 1,
-                amount: Decimal::new(100, 2),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 2,
-                amount: Decimal::new(200, 2),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 3,
-                amount: Decimal::new(300, 2),
-                disputed: false
-            },
-        ];
-        let mut account = Account::new(1);
-        for record in records {
-            account.process(&record)
-        }
-        assert_eq!(account.available, Decimal::new(600, 2));
-    }
-
-    #[test]
-    fn process_withdrawals() {
-        // copilot, omg!
-        let records = vec![
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 1,
-                amount: Decimal::new(200, 2),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Withdrawal,
-                tx_id: 2,
-                amount: Decimal::new(150, 2),
-                disputed: false
-            },
-        ];
-        let mut account = Account::new(1);
-        for record in records {
-            account.process(&record)
-        }
-        assert_eq!(account.available, Decimal::new(50, 2));
+    fn process_deposits_and_withdrawals() {
+        let account = seed_transactions();
+        assert_eq!(account.available, dec!(107.10));
     }
 
     #[test]
     fn process_prevents_overdraw() {
-        // copilot, omg!
-        let records = vec![
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 1,
-                amount: Decimal::new(200, 2),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
+        let mut account = seed_transactions();
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
                 tx_type: TransactionType::Withdrawal,
-                tx_id: 2,
-                amount: Decimal::new(300, 2),
-                disputed: false
+                tx_id: 8,
+                amount: dec!(300),
             },
-        ];
-        let mut account = Account::new(1);
-        for record in records {
-            account.process(&record)
-        }
-        assert_eq!(account.available, Decimal::new(200, 2));
+        );
+        assert_eq!(account.available, dec!(107.10));
     }
 
     #[test]
     fn process_disputed() {
-        // copilot, omg!
-        let records = vec![
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 1,
-                amount: dec!(201.00),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
-                tx_type: TransactionType::Deposit,
-                tx_id: 2,
-                amount: dec!(140.92),
-                disputed: false
-            },
-            TransactionRecord {
-                client_id: 1,
+        let mut account = seed_transactions();
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
                 tx_type: TransactionType::Dispute,
                 tx_id: 1,
                 amount: dec!(0),
-                disputed: false
             },
-        ];
-        let mut account = Account::new(1);
-        for record in records {
-            account.process(&record)
-        }
-        assert_eq!(account.available, dec!(140.92));
-        assert_eq!(account.held, dec!(201.00));
+        );
+        // exact same id to make sure we don't double-dispute
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Dispute,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        assert_eq!(account.available, dec!(7.09));
+        assert_eq!(account.held, dec!(100.01));
     }
 
     #[test]
     fn process_resolve() {
+        let mut account = seed_transactions();
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Dispute,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Resolve,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        assert_eq!(account.available, dec!(107.10));
+        assert_eq!(account.held, dec!(0));
+    }
 
+    #[test]
+    fn process_chargeback( ) {
+        let mut account = seed_transactions();
+        // must be disputed first
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Dispute,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Chargeback,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        assert!(account.locked);
+        assert_eq!(account.available, dec!(7.09));
+        assert_eq!(account.held, dec!(0));
+    }
+
+    #[test]
+    fn process_sub_pennies() {
+        let mut account = seed_transactions();
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Withdrawal,
+                tx_id: 1,
+                amount: dec!(0.0001),
+            },
+        );
+        assert_eq!(account.available, dec!(107.0999));
+    }
+
+    // test some undefinied behavior we may want to handle later
+    #[test]
+    fn process_dispute_over_balance() {
+        let mut account = seed_transactions();
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Withdrawal,
+                tx_id: 1,
+                amount: dec!(100.00),
+            },
+        );
+        // balance is now below the dispute amount
+        account.process(
+            &TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Dispute,
+                tx_id: 1,
+                amount: dec!(0),
+            },
+        );
+        // available is now negative
+        assert_eq!(account.available, dec!(-92.91));
+        assert_eq!(account.held, dec!(100.01));
+    }
+
+    fn seed_transactions() -> Account {
+        let records = vec![
+            TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Deposit,
+                tx_id: 1,
+                amount: dec!(100.01),
+            },
+            TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Withdrawal,
+                tx_id: 2,
+                amount: dec!(2.9),
+            },
+            TransactionRecord {
+                client_id: 99,
+                tx_type: TransactionType::Deposit,
+                tx_id: 3,
+                amount: dec!(9.99),
+            },
+        ];
+        let mut account = Account::new();
+        for record in records {
+            account.process(&record)
+        }
+        account
     }
 }
