@@ -17,17 +17,21 @@ fn main() {
     let mut accounts = HashMap::new();
 
     let mut total_deposits = Decimal::new(0, 2);
-    
+
     for record in records {
         total_deposits += record.amount;
 
-        println!("{}: ${:?}, {:?}", record.client_id, record.amount, record.tx_type);
+        println!(
+            "{}: ${:?}, {:?}",
+            record.client_id, record.amount, record.tx_type
+        );
 
-        let account = accounts.entry(record.client_id)
-          .or_insert_with(Account::new);
+        let account = accounts
+            .entry(record.client_id)
+            .or_insert_with(Account::new);
 
         account.process(&record);
-    };
+    }
     println!("total deposits: ${:?}", total_deposits);
 }
 
@@ -39,8 +43,10 @@ fn read_csv(data: &str) -> Vec<TransactionRecord> {
         match result {
             Err(_) => {
                 println!("Could not parse line {:?}", result.unwrap_err());
-            },
-            Ok(record) => { records.push(record); }
+            }
+            Ok(record) => {
+                records.push(record);
+            }
         };
     });
     records
