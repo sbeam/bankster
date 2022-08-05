@@ -3,7 +3,7 @@ use rust_decimal_macros::dec;
 
 #[test]
 fn test_basic_data() {
-    let data = "amount,client_id,tx,type
+    let data = "amount,client,tx,type
     100.01,  99, 1,deposit
     2.9095,  34,2, deposit  
     xxx,     xx
@@ -19,7 +19,7 @@ fn test_basic_data() {
 
 #[test]
 fn test_disputed_and_resolved_data() {
-    let data = "type,client_id,tx,amount
+    let data = "type,client,tx,amount
     deposit,33,3,9.99
     deposit,33,4,47.1
     dispute,33,3,0,
@@ -37,7 +37,7 @@ fn test_disputed_and_resolved_data() {
 
 #[test]
 fn test_chargeback_data() {
-    let data = "type,client_id,tx,amount
+    let data = "type,client,tx,amount
     deposit,33,3,9.99
     deposit,33,4,47.1
     dispute,33,3,0

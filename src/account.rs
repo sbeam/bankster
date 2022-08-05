@@ -14,7 +14,7 @@ pub enum TransactionType {
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct TransactionRecord {
-    pub client_id: u16,
+    pub client: u16,
     #[serde(rename = "type")]
     pub tx_type: TransactionType,
     #[serde(rename = "tx")]
@@ -161,7 +161,7 @@ mod tests {
     fn process_prevents_overdraw() {
         let mut account = seed_transactions();
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 8,
             amount: dec!(300),
@@ -173,14 +173,14 @@ mod tests {
     fn process_disputed() {
         let mut account = seed_transactions();
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
             amount: dec!(0),
         });
         // exact same id to make sure we don't double-dispute
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
             amount: dec!(0),
@@ -193,13 +193,13 @@ mod tests {
     fn process_resolve() {
         let mut account = seed_transactions();
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
             amount: dec!(0),
         });
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Resolve,
             tx_id: 1,
             amount: dec!(0),
@@ -213,13 +213,13 @@ mod tests {
         let mut account = seed_transactions();
         // must be disputed first
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
             amount: dec!(0),
         });
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Chargeback,
             tx_id: 1,
             amount: dec!(0),
@@ -233,7 +233,7 @@ mod tests {
     fn process_sub_pennies() {
         let mut account = seed_transactions();
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 1,
             amount: dec!(0.0001),
@@ -246,14 +246,14 @@ mod tests {
     fn process_dispute_over_balance() {
         let mut account = seed_transactions();
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 1,
             amount: dec!(100.00),
         });
         // balance is now below the dispute amount
         account.process(&TransactionRecord {
-            client_id: 99,
+            client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
             amount: dec!(0),
@@ -266,19 +266,19 @@ mod tests {
     fn seed_transactions() -> Account {
         let records = vec![
             TransactionRecord {
-                client_id: 99,
+                client: 99,
                 tx_type: TransactionType::Deposit,
                 tx_id: 1,
                 amount: dec!(100.01),
             },
             TransactionRecord {
-                client_id: 99,
+                client: 99,
                 tx_type: TransactionType::Withdrawal,
                 tx_id: 2,
                 amount: dec!(2.9),
             },
             TransactionRecord {
-                client_id: 99,
+                client: 99,
                 tx_type: TransactionType::Deposit,
                 tx_id: 3,
                 amount: dec!(9.99),

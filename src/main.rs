@@ -1,6 +1,25 @@
-fn main() {
-    let data = "amount,client_id,tx,type\n100.01,99,1,deposit\n2.9,34,2,withdrawal\nxxx,xx\n9.99,99,3,deposit\n-80,34,5,withdrawal";
-    let accounts = bankster::read_csv(data);
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+use std::error::Error;
 
-    println!("Processed {:?} accounts", accounts.len());
+type MyResult<T> = Result<T, Box<dyn Error>>;
+
+fn main() {
+    let filename = bankster::get_filename();
+    match open(&filename) {
+        Ok(file) => {
+            let accounts = bankster::read_csv(file);
+            println!("Processed {:?} accounts", accounts.len());
+        }
+        Err(err) => {
+            eprintln!("{}: {:?}", filename, err);
+        }
+    }
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
 }
