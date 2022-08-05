@@ -58,6 +58,10 @@ impl Account {
         }
     }
 
+    pub fn total(&self) -> Decimal {
+        self.available + self.held
+    }
+
     fn lock(&mut self) {
         self.locked = true;
     }
