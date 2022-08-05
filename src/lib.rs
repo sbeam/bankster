@@ -1,4 +1,3 @@
-
 mod account;
 use crate::account::*;
 use std::collections::HashMap;
@@ -13,26 +12,27 @@ pub fn read_csv(data: Box<dyn BufRead>) -> HashMap<u16, Account> {
 
     let mut accounts = HashMap::new();
 
-    rdr.deserialize().into_iter().for_each(|result:Result<TransactionRecord, csv::Error>| {
-        match result {
-            Err(_) => {
-                println!("Could not parse line {:?}", result.unwrap_err());
-            }
-            Ok(record) => {
-                let account = accounts
-                    .entry(record.client)
-                    .or_insert_with(Account::new);
+    rdr.deserialize()
+        .into_iter()
+        .for_each(|result: Result<TransactionRecord, csv::Error>| {
+            match result {
+                Err(_) => {
+                    println!("Could not parse line {:?}", result.unwrap_err());
+                }
+                Ok(record) => {
+                    let account = accounts.entry(record.client).or_insert_with(Account::new);
 
-                account.process(&record);
-            }
-        };
-    });
+                    account.process(&record);
+                }
+            };
+        });
     accounts
 }
 
 pub fn report(accounts: &HashMap<u16, Account>) -> MyResult<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
-    wtr.write_record(&["client", "available", "total", "held", "locked"]).unwrap();
+    wtr.write_record(&["client", "available", "total", "held", "locked"])
+        .unwrap();
     for (id, account) in accounts {
         wtr.write_record(&[
             &id.to_string(),
@@ -40,7 +40,8 @@ pub fn report(accounts: &HashMap<u16, Account>) -> MyResult<()> {
             &account.total().to_string(),
             &account.held.to_string(),
             &account.locked.to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
     }
     wtr.flush()?;
     Ok(())

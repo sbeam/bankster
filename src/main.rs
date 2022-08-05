@@ -1,7 +1,7 @@
+use clap::{arg, command};
+use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-use std::error::Error;
-use clap::{arg, command};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -10,7 +10,6 @@ fn main() {
     match open(&filename) {
         Ok(file) => {
             let accounts = bankster::read_csv(file);
-            println!("Processed {:?} accounts", accounts.len());
             if let Err(err) = bankster::report(&accounts) {
                 eprintln!("Could not produce the report: {:?}", err);
             }
@@ -29,9 +28,7 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
 }
 
 fn get_filename() -> String {
-    let matches = command!()
-      .arg(arg!([FILENAME]))
-      .get_matches();
+    let matches = command!().arg(arg!([FILENAME])).get_matches();
     let filename = matches.value_of("FILENAME").unwrap_or("-");
     filename.to_string()
 }
