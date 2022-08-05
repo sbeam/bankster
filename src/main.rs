@@ -11,7 +11,9 @@ fn main() {
         Ok(file) => {
             let accounts = bankster::read_csv(file);
             println!("Processed {:?} accounts", accounts.len());
-            bankster::report(&accounts);
+            if let Err(err) = bankster::report(&accounts) {
+                eprintln!("Could not produce the report: {:?}", err);
+            }
         }
         Err(err) => {
             eprintln!("{}: {:?}", filename, err);

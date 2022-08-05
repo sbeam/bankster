@@ -19,8 +19,8 @@ pub struct TransactionRecord {
     pub tx_type: TransactionType,
     #[serde(rename = "tx")]
     pub tx_id: u32,
-    #[serde(with = "rust_decimal::serde::float")]
-    pub amount: Decimal,
+    #[serde(deserialize_with = "csv::invalid_option")]
+    pub amount: Option<Decimal>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -113,17 +113,21 @@ impl Account {
     pub fn process(&mut self, transaction: &TransactionRecord) {
         match transaction.tx_type {
             TransactionType::Deposit => {
-                self.deposit(transaction.amount);
-                self.deposits.insert(
-                    transaction.tx_id,
-                    DepositRecord {
-                        disputed: false,
-                        amount: transaction.amount,
-                    },
-                );
+                match transaction.amount {
+                    Some(amount) => {
+                        self.deposits.insert(transaction.tx_id, DepositRecord {
+                            disputed: false,
+                            amount,
+                        });
+                        self.deposit(amount);
+                    }
+                    None => {
+                        println!("Invalid amount specified for deposit for transaction {}", transaction.tx_id);
+                    }
+                }
             }
             TransactionType::Withdrawal => {
-                if let Err(InsufficientFundsError) = self.withdraw(transaction.amount) {
+                if let Err(InsufficientFundsError) = self.withdraw(transaction.amount.unwrap()) {
                     // probably should do something else here
                     println!(
                         "Insufficient funds for transaction id {:?}",
@@ -168,7 +172,7 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 8,
-            amount: dec!(300),
+            amount: Some(dec!(300)),
         });
         assert_eq!(account.available, dec!(107.10));
     }
@@ -180,14 +184,14 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None
         });
         // exact same id to make sure we don't double-dispute
         account.process(&TransactionRecord {
             client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None
         });
         assert_eq!(account.available, dec!(7.09));
         assert_eq!(account.held, dec!(100.01));
@@ -200,13 +204,13 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None
         });
         account.process(&TransactionRecord {
             client: 99,
             tx_type: TransactionType::Resolve,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None
         });
         assert_eq!(account.available, dec!(107.10));
         assert_eq!(account.held, dec!(0));
@@ -220,13 +224,13 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None,
         });
         account.process(&TransactionRecord {
             client: 99,
             tx_type: TransactionType::Chargeback,
             tx_id: 1,
-            amount: dec!(0),
+            amount: None,
         });
         assert!(account.locked);
         assert_eq!(account.available, dec!(7.09));
@@ -240,7 +244,7 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 1,
-            amount: dec!(0.0001),
+            amount: Some(dec!(0.0001)),
         });
         assert_eq!(account.available, dec!(107.0999));
     }
@@ -253,14 +257,14 @@ mod tests {
             client: 99,
             tx_type: TransactionType::Withdrawal,
             tx_id: 1,
-            amount: dec!(100.00),
+            amount: Some(dec!(100.00)),
         });
         // balance is now below the dispute amount
         account.process(&TransactionRecord {
             client: 99,
             tx_type: TransactionType::Dispute,
             tx_id: 1,
-            amount: dec!(0),
+            amount: Some(dec!(0)),
         });
         // available is now negative
         assert_eq!(account.available, dec!(-92.91));
@@ -273,19 +277,19 @@ mod tests {
                 client: 99,
                 tx_type: TransactionType::Deposit,
                 tx_id: 1,
-                amount: dec!(100.01),
+                amount: Some(dec!(100.01)),
             },
             TransactionRecord {
                 client: 99,
                 tx_type: TransactionType::Withdrawal,
                 tx_id: 2,
-                amount: dec!(2.9),
+                amount: Some(dec!(2.9)),
             },
             TransactionRecord {
                 client: 99,
                 tx_type: TransactionType::Deposit,
                 tx_id: 3,
-                amount: dec!(9.99),
+                amount: Some(dec!(9.99)),
             },
         ];
         let mut account = Account::new();
